@@ -521,7 +521,7 @@ BsLocalization:AddLocale("enUS", {
 ["TooltipIdentifier_Toy_TurtleWoW"] = [[Use: Add a toy to the player's toy collection]],
 
 -- Tooltip parsing -- extracting data from tooltips.
-["TooltipParse_Charges"] = [[^(%d+) Charges$]],  -- MUST contain the (%d) capture group.
+["TooltipParse_Charges"] = [[(%d+) Charges]],  -- MUST contain the (%d) capture group.
 -- ItemInfo:IsUsable() Tooltip parsing
 ["TooltipParse_AlreadyKnown"] = _G.ITEM_SPELL_KNOWN,
 
