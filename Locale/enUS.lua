@@ -298,6 +298,8 @@ Bagshui:LoadComponent(function()
       .. "Press Shift+Enter while searching to open the Catalog.", -- %s = Inventory type.
     ["Toolbar_Resort_TooltipTitle"] = "Organize",
     ["Toolbar_Resort_TooltipText"] = "Categorize and sort.",
+    ["Toolbar_SortBags_TooltipTitle"] = "SortBags",
+    ["Toolbar_SortBags_TooltipText"] = "Call the SortBags addon to sort this inventory.",
     ["Toolbar_Restack_TooltipTitle"] = "Restack",
     ["Toolbar_Restack_TooltipText"] = "Consolidate stackable items.",
     ["Toolbar_HighlightChanges_TooltipTitle"] = "Highlight Changes",

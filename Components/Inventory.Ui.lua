@@ -42,8 +42,11 @@ Bagshui:AddComponent(function()
 
     uiFrame.bagshuiData.lastDirtyCheck = _G.GetTime()
     uiFrame:SetScript("OnUpdate", function()
+      if _G.UnitAffectingCombat and _G.UnitAffectingCombat("player") then
+        return
+      end
       -- Mark this window as dirty if any "child" windows are open.
-      if _G.GetTime() - _G.this.bagshuiData.lastDirtyCheck > 0.075 then
+      if _G.GetTime() - _G.this.bagshuiData.lastDirtyCheck > 0.25 then
         _G.this.bagshuiData.dirty = Bagshui:ChildWindowsVisible()
         _G.this.bagshuiData.lastDirtyCheck = _G.GetTime()
       end
@@ -958,6 +961,17 @@ Bagshui:AddComponent(function()
       },
 
       {
+        name = "SortBags",
+        texture = "SortOrder",
+        tooltipTitle = L.Toolbar_SortBags_TooltipTitle,
+        tooltipText = L.Toolbar_SortBags_TooltipText,
+        disable = true,
+        onClick = function()
+          self:ExternalSort()
+        end,
+      },
+
+      {
         name = "Restack",
         texture = "Restack",
         tooltipTitle = L.Toolbar_Restack_TooltipTitle,
@@ -1089,7 +1103,6 @@ Bagshui:AddComponent(function()
 
     self.online = true
     self.editMode = false
-    self.expandEmptySlotStacks = false
     self.temporarilyShowWindowHeader = false
     self.highlightChanges = false
     self.queuedTradeItem = nil -- Used by Inventory:TradeFrame_OnShow().
@@ -1103,10 +1116,10 @@ Bagshui:AddComponent(function()
     -- before CategorizeAndSort() executes. Normally, CategorizeAndSort() bails if self:Visible() is true,
     -- so forceResort is set to true to ensure inventory is properly sorted whenever the window is opened.
     -- Of course, we don't want this to happen when automatic resorting is off.
-    if not self.settings.disableAutomaticResort then
+    if not BS_INVENTORY_PERFORMANCE_DISABLE_SORTING and not self.settings.disableAutomaticResort then
       self.forceResort = true
     end
-    self.resortNeeded = true
+    self.resortNeeded = not BS_INVENTORY_PERFORMANCE_DISABLE_SORTING
     self.inventoryUpdateAllowed = true
     self.cacheUpdateNeeded = true
     self:NotifySkinOfPositionChange()

@@ -27,7 +27,7 @@ Bagshui:AddComponent(function()
     end
 
     -- If this was triggered by a bag change, wait for the next update.
-    if self.lastEvent == "ITEM_LOCK_CHANGED" and BsUtil.TrueTableSize(self.lastUpdateLockedContainers) > 0 then
+    if self.lastEvent == "ITEM_LOCK_CHANGED" and next(self.lastUpdateLockedContainers) ~= nil then
       BsUtil.TableClear(self.lastUpdateLockedContainers)
       -- Queuing another update here instead of completely ignoring to ensure that an update
       -- does happen eventually (and it should typically happen sooner than the delay here).
@@ -59,10 +59,6 @@ Bagshui:AddComponent(function()
     -- Used to determine whether change highlighting should be enabled.
     self.hasChanges = false
 
-    -- Whether any item in the cache has the `_bagshuiPreventEmptySlotStack` property set to `true`
-    -- Used by `ManageDryRun()` as a factor to determine whether `enableResortIcon` should be true.
-    self.hasSlotsWithStackingPrevented = false
-
     -- Bag (outer loop) variables.
     local bagName, bagNumSlots, bagTexture, bagType, bagSlotLink, bagItemCode, bagInfo
 
@@ -88,7 +84,7 @@ Bagshui:AddComponent(function()
         self.pendingContainerChanges[putDownContainerId] = pickedUpContainerId
       end
     end
-    local hasPendingContainerChanges = BsUtil.TrueTableSize(self.pendingContainerChanges) > 0
+    local hasPendingContainerChanges = next(self.pendingContainerChanges) ~= nil
 
     -- Loop through bags.
     -- Using _bagIndex instead of _ as the throwaway variable for this loop because
@@ -174,9 +170,6 @@ bagInfo.numSlots > 0 and (not bagInfo.name or not bagInfo.type)
 
       -- Make sure this bag has slots to process.
       if bagNumSlots > 0 then
-        -- Prepare to stack empty slots (actual stacking is handled during UpdateWindow()).
-        self:InitializeEmptySlotStackTracking(bagInfo)
-
         -- Time to go through all the bag slots and look at each item.
         for slotNum = 1, bagNumSlots do
           shadowId = nil
@@ -290,12 +283,6 @@ bagInfo.numSlots > 0 and (not bagInfo.name or not bagInfo.type)
               BsItemInfo:InitializeEmptySlotItem(item)
               if self.containers[bagNum].isProfessionBag then
                 item.name = item.bagType .. " " .. item.name
-              end
-
-              -- Slot has just become empty - don't allow it to collapse back
-              -- into the stack until re-sorting occurs.
-              if preItemLink ~= nowItemLink then
-                item._bagshuiPreventEmptySlotStack = true
               end
 
               -- Add to empty slot tracking table.
@@ -493,11 +480,6 @@ item._proposedStockState ~= BS_ITEM_STOCK_STATE.DOWN
         if item.bagshuiStockState ~= BS_ITEM_STOCK_STATE.NO_CHANGE then
           self.hasChanges = true
         end
-
-        -- Update tracking of empty slots peeled off the stack.
-        if item._bagshuiPreventEmptySlotStack then
-          self.hasSlotsWithStackingPrevented = true
-        end
       end
     end
     -- This update cycle's post-update counts become next cycle's pre-update counts.
@@ -556,30 +538,9 @@ item._proposedStockState ~= BS_ITEM_STOCK_STATE.DOWN
   --- Add bag information to the given cache item.
   ---@param item table self.inventory cache entry.
   ---@param bagInfo table self.containers entry.
-  ---@param isEmptySlotStack boolean? true if this slot
-  function Inventory:AddItemBagInfo(item, bagInfo, isEmptySlotStack)
+  function Inventory:AddItemBagInfo(item, bagInfo)
     item.bagNum = bagInfo.bagNum
-    -- Empty slot stack proxy items expected to have their "generic type" as their bagType
-    -- instead of the value returned by GetItemInfo() for the bag. This is needed
-    -- so that profession bag slots can be named properly in InitializeEmptySlotItem().
-    item.bagType = isEmptySlotStack and bagInfo.genericType or bagInfo.type
-  end
-
-  --- Prepare an entry in the emptySlotStacks table for to track the empty slot count for a given bag.
-  ---@param bagInfo table self.containers entry.
-  function Inventory:InitializeEmptySlotStackTracking(bagInfo)
-    if not bagInfo.genericType then
-      return
-    end
-
-    if not self.emptySlotStacks[bagInfo.genericType] then
-      self.emptySlotStacks[bagInfo.genericType] = {}
-    end
-
-    -- Always re-initialize when called to ensure bag changes don't result in incorrect empty slot textures.
-    BsItemInfo:InitializeItem(self.emptySlotStacks[bagInfo.genericType])
-    self:AddItemBagInfo(self.emptySlotStacks[bagInfo.genericType], bagInfo, true)
-    BsItemInfo:InitializeEmptySlotItem(self.emptySlotStacks[bagInfo.genericType], true)
+    item.bagType = bagInfo.type
   end
 end)
 

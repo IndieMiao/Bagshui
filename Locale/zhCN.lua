@@ -319,6 +319,8 @@ Bagshui:LoadComponent(function()
       .. "在搜索时按 Shift+Enter 打开目录。", -- %s = 背包类型。
     ["Toolbar_Resort_TooltipTitle"] = "整理",
     ["Toolbar_Resort_TooltipText"] = "分类和排序。",
+    ["Toolbar_SortBags_TooltipTitle"] = "SortBags",
+    ["Toolbar_SortBags_TooltipText"] = "调用 SortBags 插件来整理当前背包。",
     ["Toolbar_Restack_TooltipTitle"] = "重新堆叠",
     ["Toolbar_Restack_TooltipText"] = "合并可堆叠物品。",
     ["Toolbar_HighlightChanges_TooltipTitle"] = "高亮更改",

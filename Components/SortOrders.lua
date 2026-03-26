@@ -322,6 +322,15 @@ Bagshui:AddComponent(function()
     -- This function consumes self._sortGroup_SortFields as a way to get another parameter into the function.
     if not self._sortGroup_Sort then
       self._sortGroup_Sort = function(itmA, itmB)
+        -- Defensive guard: table.sort must compare real entries only.
+        if itmA == nil and itmB == nil then
+          return false
+        elseif itmA == nil then
+          return false
+        elseif itmB == nil then
+          return true
+        end
+
         -- Loop through all sort fields in order and check each one to see if it's applicable
         for i, sort in ipairs(self._sortGroup_SortFields) do
           -- Start with some defaults.
@@ -404,6 +413,13 @@ Bagshui:AddComponent(function()
     end
 
     -- Sort the groupItems table.
+    -- Defensively remove sparse holes before sorting to avoid nil comparator inputs.
+    for i = table.getn(groupItems), 1, -1 do
+      if groupItems[i] == nil then
+        table.remove(groupItems, i)
+      end
+    end
+
     self._sortGroup_SortFields = self.list[sortOrderId].fields
     table.sort(groupItems, self._sortGroup_Sort)
   end

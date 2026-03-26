@@ -226,8 +226,7 @@ Bagshui:AddComponent(function()
         -- Safety check to ensure pointers are always reset.
         or self.groups ~= self.currentLayoutState.groups
       then
-        -- We can immediately know to enable resorting if any empty slot is peeled off its stack.
-        self.enableResortIcon = (self.emptySlotStackingAllowed and self.hasSlotsWithStackingPrevented)
+        self.enableResortIcon = false
 
         for key, _ in pairs(self.currentLayoutState) do
           if
@@ -423,6 +422,28 @@ Bagshui:AddComponent(function()
     local defaultGroupId = self.categoriesToGroups[BsCategories.defaultCategory]
     local groupId
 
+    if BS_INVENTORY_PERFORMANCE_DISABLE_CATEGORIZATION then
+      for _, bagNum in ipairs(self.containerIds) do
+        if self.containers[bagNum].numSlots > 0 and table.getn(self.inventory[bagNum]) > 0 then
+          local bagNumSlots = self.containers[bagNum].numSlots
+          for slotNum = 1, bagNumSlots do
+            self.inventory[bagNum][slotNum].bagshuiGroupId = defaultGroupId
+            self.inventory[bagNum][slotNum].bagshuiCategoryId = BsCategories.defaultCategory
+            self.inventory[bagNum][slotNum].uncategorized = 1
+
+            if not self.dryRun and self.inventory[bagNum][slotNum].emptySlot == 1 then
+              self.inventory[bagNum][slotNum]._bagshuiPreventEmptySlotStack = nil
+            end
+
+            table.insert(self.groupItems[defaultGroupId], self.inventory[bagNum][slotNum])
+          end
+        end
+      end
+
+      self.errorText = ""
+      return
+    end
+
     -- Perform the actual categorization.
     for _, bagNum in ipairs(self.containerIds) do
       -- Only process bags that have contents.
@@ -446,14 +467,6 @@ Bagshui:AddComponent(function()
               groupId = defaultGroupId
             end
 
-            -- Empty slots are now allowed to stack since they've been through the categorizing process.
-            -- (When an empty slot is first seen during a cache update, it gets the _bagshuiPreventEmptySlotStack
-            -- property set so that empty slots don't just "disappear" into a stack when the window is open
-            -- and the user moves an item out of a slot.)
-            if not self.dryRun and self.inventory[bagNum][slotNum].emptySlot == 1 then
-              self.inventory[bagNum][slotNum]._bagshuiPreventEmptySlotStack = nil
-            end
-
             -- Final safety check to ensure we don't somehow try to assign to a group that doesn't exist.
             if not self.groupItems[groupId] then
               groupId = defaultGroupId
@@ -473,6 +486,9 @@ Bagshui:AddComponent(function()
   -- Sort each group's items in the configured order.
   -- **Should not be called directly!** Use `Inventory:Update()` to coordinate the process.
   function Inventory:SortGroups()
+    if BS_INVENTORY_PERFORMANCE_DISABLE_SORTING then
+      return
+    end
     for groupId, groupConfig in pairs(self.activeGroups) do
       BsSortOrders:SortGroup(self.groupItems[groupId], groupConfig, self.settings.defaultSortOrder)
     end
@@ -537,7 +553,7 @@ Bagshui:AddComponent(function()
     -- Done here because it's consumed in `UpdateBagBar()` and `UpdateToolbar()`.
     self.alwaysShowUsageSummary = (
       self.settings.bagUsageDisplay == BS_INVENTORY_BAG_USAGE_DISPLAY.ALWAYS
-      or (self.settings.bagUsageDisplay == BS_INVENTORY_BAG_USAGE_DISPLAY.SMART and not self.settings.stackEmptySlots)
+      or (self.settings.bagUsageDisplay == BS_INVENTORY_BAG_USAGE_DISPLAY.SMART)
       or false
     )
 
@@ -582,17 +598,6 @@ Bagshui:AddComponent(function()
       self.nextOpenableItemBagNum = nil -- Updated in AssignItemsToSlots().
       self.nextOpenableItemSlotNum = nil -- Updated in AssignItemsToSlots().
       self.nextOpenableItemSlotButton = nil -- Updated in AssignItemsToSlots().
-
-      -- Full reset of empty slot stack counts is needed so that the tracking of which
-      -- bag they represent is rebuilt.
-      self:ResetEmptySlotStackCounts(true)
-
-      -- Is empty slot stacking currently allowed?
-      self.emptySlotStackingAllowed = (
-        self.settings.stackEmptySlots -- User setting.
-        and not self.expandEmptySlotStacks -- Temporary expansion.
-        and not self.editMode -- Always expand in Edit Mode.
-      )
 
       -- Used to track row changes so they include group move targets (the normal
       -- rowNum variable is just an iteration over self.layout).
@@ -1195,7 +1200,6 @@ self.settings.showBagBar and (uiButtons.itemSlots[1].bagshuiData.originalSizeAdj
     Bagshui:QueueClassCallback(self, self.ItemSlotAndGroupMouseOverCheck)
 
     -- Reset statuses.
-    self.lastExpandEmptySlotStacks = self.expandEmptySlotStacks
     self.windowUpdateNeeded = false
   end
 
@@ -1221,13 +1225,9 @@ self.settings.showBagBar and (uiButtons.itemSlots[1].bagshuiData.originalSizeAdj
 
     local itemsPlacedInCurrentRow = 0
     local rowNum = 0
-    local genericBagType
     local button
-    local isEmptySlotStack
 
     -- We need the real item count here to be able to step through all items.
-    -- (Using the count for layout from upstream won't work if empty slot
-    -- stacking is on because we can end up missing items).
     local groupItemCount = table.getn(self.groupItems[groupId])
 
     -- Make sure there are items to assign in this group.
@@ -1248,11 +1248,6 @@ self.settings.showBagBar and (uiButtons.itemSlots[1].bagshuiData.originalSizeAdj
         initialOffset -- Initial Y offset
       )
 
-      -- Update empty slot stack count for this group.
-      if self.emptySlotStackingAllowed then
-        self:CountEmptySlots(groupId)
-      end
-
       -- Need to go in reverse because we're building right to left.
       local firstItem = groupItemCount
       local lastItem = 1
@@ -1262,29 +1257,9 @@ self.settings.showBagBar and (uiButtons.itemSlots[1].bagshuiData.originalSizeAdj
       for position = firstItem, lastItem, step do
         -- Grab the item info.
         item = self.groupItems[groupId][position]
-        genericBagType = self.containers[item.bagNum].genericType
 
-        -- Item hiding and empty slot handling
+        -- Item hiding.
         hideItem = false
-        isEmptySlotStack = false
-
-        -- Empty slot stacking.
-        if
-          self.emptySlotStackingAllowed -- Empty slot stacking must be on.
-          and item.emptySlot == 1 -- This item must be an empty slot.
-          and not item._bagshuiPreventEmptySlotStack -- This slot must not be temporarily blocked from stacking (usually if it just became empty and re-sorting hasn't occurred yet).
-        then
-          -- We've already shown one empty slot of this type in this group, so hide all the others.
-          if self.emptySlotStacks[genericBagType].displayed then
-            hideItem = true
-          else
-            -- Prevent any more empty slots of this generic container type from appearing in this group.
-            self.emptySlotStacks[genericBagType].displayed = true
-            -- Override the normal empty slot item with the stack so the count displays.
-            item = self.emptySlotStacks[genericBagType]
-            isEmptySlotStack = true
-          end
-        end
 
         -- Determine whether this item is hidden.
         if
@@ -1310,11 +1285,9 @@ self.settings.showBagBar and (uiButtons.itemSlots[1].bagshuiData.originalSizeAdj
           -- them during UI events.
           button.bagshuiData.groupId = groupId
           button.bagshuiData.position = position
-          -- These always need to refer to the original item's location so
-          -- empty slot stacks magically work with click events
           button.bagshuiData.bagNum = self.groupItems[groupId][position].bagNum
           button.bagshuiData.slotNum = self.groupItems[groupId][position].slotNum
-          button.bagshuiData.isEmptySlotStack = isEmptySlotStack
+          button.bagshuiData.isEmptySlotStack = false
 
           -- Display the item slot button.
           self:ShowFrameInNextPosition("AssignItemsToSlots", rowNum, button, itemSlotSize)
@@ -1349,47 +1322,6 @@ self.settings.showBagBar and (uiButtons.itemSlots[1].bagshuiData.originalSizeAdj
     return currentItemSlotButtonNum
   end
 
-  --- Call this before using `UpdateEmptySlotStackCount()` to zero the counts on the self.emptySlotStacks items
-  ---@param resetBagsRepresented boolean? Clear the `_bagsRepresented` property of the empty slot stack items. Should only be called with `true` once per window update.
-  function Inventory:ResetEmptySlotStackCounts(resetBagsRepresented)
-    for _, emptySlotStack in pairs(self.emptySlotStacks) do
-      emptySlotStack.count = 0
-      emptySlotStack.displayed = false
-      if resetBagsRepresented then
-        BsUtil.TableClear(emptySlotStack._bagsRepresented)
-      end
-    end
-  end
-
-  --- Loop through all items in a group and add their counts to the appropriate empty
-  --- slot stack using `UpdateEmptySlotStackCount()`
-  ---@param groupId number ID of group to count empty slots for.
-  function Inventory:CountEmptySlots(groupId)
-    self:ResetEmptySlotStackCounts()
-    for _, item in pairs(self.groupItems[groupId]) do
-      self:UpdateEmptySlotStackCount(item)
-    end
-  end
-
-  --- Determine whether a slot is empty, and if so, add 1 to the appropriate per-bag-type empty slot stack.
-  ---@param item table Bagshui inventory cache entry.
-  ---@return boolean # true if the item is an empty slot.
-  function Inventory:UpdateEmptySlotStackCount(item)
-    -- Only increment the count for slots that are empty AND not temporarily prevented from stacking.
-    if item.emptySlot == 1 and not item._bagshuiPreventEmptySlotStack then
-      -- genericType SHOULD be filled in, but let's just be sure.
-      local genericBagType = self.containers[item.bagNum].genericType or BsGameInfo.itemSubclasses.Container.Bag
-      -- Increment the count.
-      self.emptySlotStacks[genericBagType].count = self.emptySlotStacks[genericBagType].count + 1
-      -- Record that the bag containing this item is represented by this stack
-      -- (used during container mouseover slot highlighting).
-      self.emptySlotStacks[genericBagType]._bagsRepresented[item.bagNum] = true
-      -- Return true so calling functions can know the item is an empty slot.
-      return true
-    end
-    return false
-  end
-
   --- Return the number of items in a group that will be visible, accounting for stacked slots and hidden items.
   --- Also updates `self.hasHiddenItems`.
   ---@param groupId number ID of group to get the number of items for.
@@ -1406,16 +1338,12 @@ self.settings.showBagBar and (uiButtons.itemSlots[1].bagshuiData.originalSizeAdj
       return table.getn(self.groupItems[groupId])
     end
 
-    -- Slot stacking / item hiding is enabled, so prepare for more complex counting.
+    -- Item hiding is enabled, so prepare for more complex counting.
     local visibleItemCount = 0
     local itemVisible
-    local hasEmptySlots = false
     local hasItemsInFilterBag = false
 
-    -- We'll be using the permanent self.emptySlotStacks items, so reset their counts first.
-    self:ResetEmptySlotStackCounts()
-
-    -- Count up the number of visible items while figuring out if there are any empty slots or hidden items.
+    -- Count up the number of visible items while figuring out if there are any hidden items.
     for _, item in ipairs(self.groupItems[groupId]) do
       -- Assume the item will be counted
       itemVisible = true
@@ -1425,16 +1353,8 @@ self.settings.showBagBar and (uiButtons.itemSlots[1].bagshuiData.originalSizeAdj
         hasItemsInFilterBag = true
       end
 
-      -- Empty slot stacks and hidden items.
-      if self:UpdateEmptySlotStackCount(item) then
-        -- This is an empty slot stack, which we know because in addition to
-        -- updating the appropriate empty slot stack proxy item in self.emptySlotsStacks,
-        -- UpdateEmptySlotStackCount() returns true if the given item is an empty slot.
-        if self.emptySlotStackingAllowed then
-          itemVisible = false
-          hasEmptySlots = true
-        end
-      elseif self.hideItems[item.id] then
+      -- Hidden items.
+      if self.hideItems[item.id] then
         -- Hidden items.
         -- We need to update hasHiddenItems even if we're not actually hiding this item so that the toolbar icon will be enabled.
         self.hasHiddenItems = true
@@ -1445,15 +1365,6 @@ self.settings.showBagBar and (uiButtons.itemSlots[1].bagshuiData.originalSizeAdj
       -- Increment count if visible.
       if itemVisible then
         visibleItemCount = visibleItemCount + 1
-      end
-    end
-
-    -- Add 1 for each empty slot stack that contains 1 or more slots.
-    if hasEmptySlots then
-      for _, emptySlotStack in pairs(self.emptySlotStacks) do
-        if emptySlotStack.count > 0 then
-          visibleItemCount = visibleItemCount + 1
-        end
       end
     end
 
@@ -1512,10 +1423,6 @@ self.settings.showBagBar and (uiButtons.itemSlots[1].bagshuiData.originalSizeAdj
     positioningTable.anchorYOffset = initialYOffset
   end
 
-  --- Helper function for `UpdateWindow()` to manage the process of displaying the grid of
-  --- groups and items within those groups at the correct location.
-  ---@param positioningTableName string Identifier for this positioning table that was prepared in `InitFramePositioningTable()`.
-  ---@param rowNum number Current row number.
   ---@param frame table Frame to display.
   ---@param width number Frame width.
   ---@param height number? Frame height (will use width if not specified).
@@ -1989,6 +1896,13 @@ self.dockedInventory and self.dockedInventory.enableResortIcon
 self.dockedInventory and self.dockedInventory.multiplePartialStacks
         )
       )
+    )
+
+    -- SortBags icon.
+    self:SetToolbarButtonState(
+      toolbarButtons.sortBags,
+      (self.inventoryType == "Bags" or self.inventoryType == "Bank"),
+      self:CanUseExternalSort()
     )
 
     -- Show/Hide icon.

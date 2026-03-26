@@ -587,14 +587,6 @@ Bagshui:AddComponent(function()
           {
             menuTitle = L.Menu_Settings_ItemSlots,
           },
-          {
-            name = "stackEmptySlots",
-            scope = BS_SETTING_SCOPE.INVENTORY,
-            profileScope = BS_SETTING_PROFILE_SCOPE.STRUCTURE,
-            type = BS_SETTING_TYPE.BOOLEAN,
-            defaultValue = true,
-            inventoryResortOnChange = true,
-          },
 
           {
             menuTitle = L.Menu_Settings_Defaults,

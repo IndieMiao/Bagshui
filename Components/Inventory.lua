@@ -96,6 +96,18 @@ Bagshui:AddComponent(function()
       Right = "   ",
     },
 
+    -- Aggressive performance mode trades functionality for lower CPU cost.
+    -- Enabled by default because the current priority is responsiveness.
+    BS_INVENTORY_PERFORMANCE_MODE = true,
+    -- Disable extra inventory context refresh events that trigger cache/layout work.
+    BS_INVENTORY_PERFORMANCE_DISABLE_CONTEXT_EVENTS = true,
+    -- Disable rule/category-based item grouping and use the default category only.
+    BS_INVENTORY_PERFORMANCE_DISABLE_CATEGORIZATION = true,
+    -- Disable Bagshui sorting and keep native bag/slot order.
+    BS_INVENTORY_PERFORMANCE_DISABLE_SORTING = true,
+    -- Disable empty slot stacking and related UI/interaction.
+    BS_INVENTORY_PERFORMANCE_DISABLE_EMPTY_SLOT_STACKING = true,
+
     -- Enum used by `Visible()` (passed from `OpenCloseToggle()`) to call the correct UI visibility function.
     -- Values must correspond to class function names.
     ---@enum BS_INVENTORY_UI_VISIBILITY_ACTION
@@ -252,18 +264,18 @@ Bagshui:AddComponent(function()
         BAGSHUI_INVENTORY_INIT_RETRY = true,
         BAGSHUI_INVENTORY_EDIT_MODE_UPDATE = true, -- Need to register for this so inventory classes that share the same Structure profile can stay in sync.
         BAGSHUI_INVENTORY_SEARCH = true,
-        BAGSHUI_ACTIVE_QUEST_ITEM_UPDATE = true,
+        BAGSHUI_ACTIVE_QUEST_ITEM_UPDATE = not BS_INVENTORY_PERFORMANCE_DISABLE_CONTEXT_EVENTS,
         BAGSHUI_INITIAL_INVENTORY_UPDATE = true,
-        BAGSHUI_CATEGORY_UPDATE = true,
-        BAGSHUI_CHARACTER_LEARNED_RECIPE = true,
-        BAGSHUI_CHARACTER_UPDATE = true,
+        BAGSHUI_CATEGORY_UPDATE = not BS_INVENTORY_PERFORMANCE_DISABLE_CATEGORIZATION,
+        BAGSHUI_CHARACTER_LEARNED_RECIPE = not BS_INVENTORY_PERFORMANCE_DISABLE_CONTEXT_EVENTS,
+        BAGSHUI_CHARACTER_UPDATE = not BS_INVENTORY_PERFORMANCE_DISABLE_CONTEXT_EVENTS,
         BAGSHUI_CHARACTERDATA_UPDATE = true,
-        BAGSHUI_GAME_UPDATE = true,
-        BAGSHUI_PROFESSION_ITEM_UPDATE = true,
+        BAGSHUI_GAME_UPDATE = not BS_INVENTORY_PERFORMANCE_DISABLE_CONTEXT_EVENTS,
+        BAGSHUI_PROFESSION_ITEM_UPDATE = not BS_INVENTORY_PERFORMANCE_DISABLE_CONTEXT_EVENTS,
         BAGSHUI_PROFILE_UPDATE = true,
         BAGSHUI_SETTING_UPDATE = true,
-        BAGSHUI_SORTORDER_UPDATE = true,
-        BAGSHUI_EQUIPPED_HISTORY_UPDATE = true,
+        BAGSHUI_SORTORDER_UPDATE = not BS_INVENTORY_PERFORMANCE_DISABLE_SORTING,
+        BAGSHUI_EQUIPPED_HISTORY_UPDATE = not BS_INVENTORY_PERFORMANCE_DISABLE_CONTEXT_EVENTS,
         BAGSHUI_WINDOW_OPENED = true,
         BAGSHUI_WINDOW_CLOSED = true,
       },
@@ -354,13 +366,9 @@ Bagshui:AddComponent(function()
       -- Tracking tables and state variables for UpdateWindow() and friends.
       -- Detailed descriptions typically can be found where each is first referenced.
       actualGroupWidths = {},
-      emptySlotStacks = {}, -- Fake item entries used to create empty slot stacks in the UI
       groupItemCounts = {},
       groupsIdsToFrames = {},
       groupWidthsInItems = {},
-      expandEmptySlotStacks = false,
-      lastExpandEmptySlotStacks = false,
-      hasSlotsWithStackingPrevented = false, -- Whether any item in the cache has the `_bagshuiPreventEmptySlotStack` property set to `true` (managed by `UpdateCache()`).
       highlightItemsInContainerId = nil,
       highlightItemsInContainerLocked = false,
       highlightItemsContainerSlot = nil,
@@ -630,6 +638,14 @@ Bagshui:AddComponent(function()
     Bagshui:QueueClassCallback(self, self.Update, delay or 0.07, false, cascade)
   end
 
+  --- Queue an update without resetting an existing queued callback.
+  --- Used for combat throttling so high-frequency events don't continuously postpone updates.
+  ---@param delay number? Delay before update in seconds.
+  ---@param cascade boolean? Parameter for `Inventory:Update()`.
+  function Inventory:QueueUpdateThrottled(delay, cascade)
+    Bagshui:QueueClassCallback(self, self.Update, delay or 0.25, true, cascade)
+  end
+
   --- Event handling.
   ---@param event string Event identifier.
   ---@param arg1 any? Argument 1 from the event.
@@ -665,6 +681,44 @@ Bagshui:AddComponent(function()
 
     if not self.initialized then
       return
+    end
+
+    -- Aggressive combat throttle mode:
+    -- - Coalesce frequent inventory events to fixed-rate updates.
+    -- - Skip non-critical cooldown-only repaint during combat.
+    local inCombat = (_G.UnitAffectingCombat and _G.UnitAffectingCombat("player"))
+    if inCombat then
+      if event == "BAG_UPDATE_COOLDOWN" then
+        return
+      end
+
+      if event == "BAG_UPDATE" or event == "ITEM_LOCK_CHANGED" then
+        if event == "BAG_UPDATE" and not self.myContainerIds[arg1] then
+          return
+        end
+        if event == "ITEM_LOCK_CHANGED" and not Bagshui.pickedUpBagSlotNum and not Bagshui.putDownBagSlotNum then
+          self.forceCacheUpdate = true
+        else
+          self.cacheUpdateNeeded = true
+        end
+        self.windowUpdateNeeded = self.windowUpdateNeeded or self:Visible()
+        self:QueueUpdateThrottled(0.25)
+        return
+      end
+
+      if
+        event == "BAGSHUI_ACTIVE_QUEST_ITEM_UPDATE"
+        or event == "BAGSHUI_CHARACTER_UPDATE"
+        or event == "BAGSHUI_EQUIPPED_HISTORY_UPDATE"
+        or event == "BAGSHUI_GAME_UPDATE"
+        or event == "BAGSHUI_PROFESSION_ITEM_UPDATE"
+      then
+        self.cacheUpdateNeeded = true
+        self.windowUpdateNeeded = self.windowUpdateNeeded or self:Visible()
+        self.resortNeeded = self.resortNeeded or self:Visible()
+        self:QueueUpdateThrottled(0.4)
+        return
+      end
     end
 
     -- BAG_UPDATE: Don't do anything if arg1 is for a bag not handled by this class.
@@ -912,9 +966,6 @@ Bagshui:AddComponent(function()
           numSlots = 0,
         }
       end
-      -- Need to call this here to make sure there aren't errors when Bank is
-      -- brought up offline before visiting a banker.
-      self:InitializeEmptySlotStackTracking(self.containers[bagNum])
     end
 
     -- Remove any bag slot highlighting since bags are going to change.

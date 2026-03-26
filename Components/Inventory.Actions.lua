@@ -72,6 +72,54 @@ Bagshui:AddComponent(function()
     self:Update(true)
   end
 
+  --- Return the SortBags addon function appropriate for this inventory, if any.
+  ---@return function?
+  function Inventory:GetExternalSortFunction()
+    if self.inventoryType == "Bags" then
+      return _G.SortBags
+    end
+
+    if self.inventoryType == "Bank" then
+      return _G.SortBankBags
+    end
+
+    return nil
+  end
+
+  --- Return whether the SortBags addon can sort the current inventory right now.
+  ---@return boolean
+  function Inventory:CanUseExternalSort()
+    local sortFunction = self:GetExternalSortFunction()
+    if type(sortFunction) ~= "function" then
+      return false
+    end
+
+    if not self.online or self.activeCharacterId ~= Bagshui.currentCharacterId then
+      return false
+    end
+
+    if self.inventoryType == "Bank" and not self.atBank then
+      return false
+    end
+
+    return true
+  end
+
+  --- Run the external SortBags addon against the current inventory.
+  function Inventory:ExternalSort()
+    local sortFunction = self:GetExternalSortFunction()
+    if type(sortFunction) ~= "function" then
+      return
+    end
+
+    if not self:CanUseExternalSort() then
+      return
+    end
+
+    _G.PlaySound("igQuestLogOpen")
+    sortFunction()
+  end
+
   --- Initiate the restacking process.
   --- This doesn't do the actual work; it just sets up a queue of restack operations,
   --- which is necessary because there needs to be a slight delay between each operation.

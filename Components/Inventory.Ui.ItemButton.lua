@@ -75,7 +75,8 @@ Bagshui:AddComponent(function()
       slotButton:SetScript("OnClick", inventory._itemSlotButton_ScriptWrapper_OnClick)
       slotButton:SetScript("OnDragStart", inventory._itemSlotButton_ScriptWrapper_OnDragStart)
       slotButton:SetScript("OnReceiveDrag", inventory._itemSlotButton_ScriptWrapper_OnReceiveDrag)
-      slotButton:SetScript("OnUpdate", inventory._itemSlotButton_ScriptWrapper_OnUpdate)
+      -- Performance mode: only enable OnUpdate while this slot is hovered.
+      slotButton:SetScript("OnUpdate", nil)
       slotButton:SetScript("OnEnter", inventory._itemSlotButton_ScriptWrapper_OnEnter)
       slotButton:SetScript("OnLeave", inventory._itemSlotButton_ScriptWrapper_OnLeave)
       slotButton:SetScript("OnHide", InventoryItemButton_OnHide)
@@ -227,6 +228,9 @@ Bagshui:AddComponent(function()
     -- when the frame is behind other frames.
     buttonInfo.mouseIsOver = true
 
+    -- Performance mode: enable per-frame updates only while hovered.
+    itemButton:SetScript("OnUpdate", self._itemSlotButton_ScriptWrapper_OnUpdate)
+
     -- Highlight all items belonging to a category on mouseover in Edit Mode,
     -- but only if an object hasn't been picked up.
     if self.editState.cursorItem == nil then
@@ -309,23 +313,8 @@ Bagshui:AddComponent(function()
         _G.GameTooltip:ClearLines()
 
         -- Add name.
-        if (displayTooltipForEmptySlots or self.settings.stackEmptySlots) and item.name ~= nil then
+        if displayTooltipForEmptySlots and item.name ~= nil then
           _G.GameTooltip:AddLine(BsItemInfo:GetQualityColoredName(item), 1, 1, 1, true)
-        end
-
-        -- Empty slot stacking/unstacking instructions should only be added when appropriate.
-        if not self.editMode and self.settings.stackEmptySlots and not _G.CursorHasItem() then
-          _G.GameTooltip:AddLine(
-            string.format(
-              L.Tooltip_Inventory_ToggleEmptySlotStacking,
-              L.Click,
-              string.lower(self.expandEmptySlotStacks and L.Stack or L.Unstack)
-            ),
-            nil,
-            nil,
-            nil,
-            true
-          )
         end
       else
         -- There's an item in this slot.
@@ -470,89 +459,86 @@ Bagshui:AddComponent(function()
       Bagshui:SetInfoTooltipPosition(itemButton, true, self.editMode)
 
       if not self.editMode then
-        -- There's no real information to show for empty slot stacks.
-        if not buttonInfo.isEmptySlotStack then
-          -- Populate the tooltip.
-          if _G.IsControlKeyDown() and not self.itemPendingSale then
-            -- All item properties.
-            BsItemInfo:AddTooltipInfo(item, BsInfoTooltip)
-          else
-            -- Normal mode.
+        -- Populate the tooltip.
+        if _G.IsControlKeyDown() and not self.itemPendingSale then
+          -- All item properties.
+          BsItemInfo:AddTooltipInfo(item, BsInfoTooltip)
+        else
+          -- Normal mode.
 
-            -- Sell protection confirmation instructions.
-            if self.ui:IsFrameVisible("MerchantFrame") and self.itemPendingSale == item then
-              self:AddBagshuiInfoTooltipLine(
-                BS_FONT_COLOR.UI_ORANGE .. L.Inventory_Item_SellProtection_ConfirmSale .. FONT_COLOR_CODE_CLOSE
-              )
-              self:AddBagshuiInfoTooltipLine(
-                LIGHTYELLOW_FONT_COLOR_CODE
-                  .. string.format(L.Inventory_Item_SellProtection_Reason, self:GetItemSellProtectionReason(item))
-                  .. FONT_COLOR_CODE_CLOSE
-              )
-              self:AddBagshuiInfoTooltipLine(
-                GRAY_FONT_COLOR_CODE .. L.Inventory_Item_SellProtection_OverrideHint .. FONT_COLOR_CODE_CLOSE
-              )
-            end
+          -- Sell protection confirmation instructions.
+          if self.ui:IsFrameVisible("MerchantFrame") and self.itemPendingSale == item then
+            self:AddBagshuiInfoTooltipLine(
+              BS_FONT_COLOR.UI_ORANGE .. L.Inventory_Item_SellProtection_ConfirmSale .. FONT_COLOR_CODE_CLOSE
+            )
+            self:AddBagshuiInfoTooltipLine(
+              LIGHTYELLOW_FONT_COLOR_CODE
+                .. string.format(L.Inventory_Item_SellProtection_Reason, self:GetItemSellProtectionReason(item))
+                .. FONT_COLOR_CODE_CLOSE
+            )
+            self:AddBagshuiInfoTooltipLine(
+              GRAY_FONT_COLOR_CODE .. L.Inventory_Item_SellProtection_OverrideHint .. FONT_COLOR_CODE_CLOSE
+            )
+          end
 
-            -- Inventory counts.
-            BsCatalog:AddTooltipInfo(item.itemString, BsInfoTooltip)
+          -- Inventory counts.
+          BsCatalog:AddTooltipInfo(item.itemString, BsInfoTooltip)
 
-            -- Only show more in-depth info when Alt is held, even if showInfoTooltipsWithoutAlt is on.
-            if _G.IsAltKeyDown() then
-              -- Active quest info.
-              if Bagshui.activeQuestItems[item.name] then
-                if BsInfoTooltip:NumLines() > 0 then
-                  self:AddBagshuiInfoTooltipLine(" ")
-                end
-                self:AddBagshuiInfoTooltipLine(
-                  tostring(Bagshui.activeQuestItems[item.name].obtained or "?")
-                    .. "/"
-                    .. tostring(Bagshui.activeQuestItems[item.name].needed or "?"),
-                  string.format(L.Symbol_Colon, L.ItemPropFriendly_activeQuest)
-                )
-              end
-
-              -- Stock state.
-              if
-                (item.bagshuiDate or 0) > 0
-                and item.bagshuiStockState ~= nil
-                and item.bagshuiStockState ~= BS_ITEM_STOCK_STATE.NO_CHANGE
-              then
-                if BsInfoTooltip:NumLines() > 0 then
-                  self:AddBagshuiInfoTooltipLine(" ")
-                end
-                self:AddBagshuiInfoTooltipLine(
-                  L["Stock_" .. item.bagshuiStockState],
-                  string.format(L.Symbol_Colon, L.StockState)
-                )
-                self:AddBagshuiInfoTooltipLine(
-                  BsUtil.FormatTimeRemainingString(_G.time() - item.bagshuiDate),
-                  string.format(L.Symbol_Colon, L.StockLastChange)
-                )
-              end
-
-              -- Assigned category and bag name.
+          -- Only show more in-depth info when Alt is held, even if showInfoTooltipsWithoutAlt is on.
+          if _G.IsAltKeyDown() then
+            -- Active quest info.
+            if Bagshui.activeQuestItems[item.name] then
               if BsInfoTooltip:NumLines() > 0 then
                 self:AddBagshuiInfoTooltipLine(" ")
               end
               self:AddBagshuiInfoTooltipLine(
-                (BsCategories:GetName(item.bagshuiCategoryId) or L.Error_ItemCategoryUnknown),
-                string.format(L.Symbol_Colon, L.Category),
-                false
+                tostring(Bagshui.activeQuestItems[item.name].obtained or "?")
+                  .. "/"
+                  .. tostring(Bagshui.activeQuestItems[item.name].needed or "?"),
+                string.format(L.Symbol_Colon, L.ItemPropFriendly_activeQuest)
               )
-              self:AddBagshuiInfoTooltipLine(
-                (self.containers[item.bagNum].name or L.Unknown),
-                string.format(L.Symbol_Colon, L.Bag)
-              )
-
-              -- Instructions.
-              self:AddBagshuiInfoTooltipLine(" ")
-              self:AddBagshuiInfoTooltipLine(
-                L.AltRightClick,
-                string.format(L.Symbol_Colon, string.format(L.Suffix_Menu, L.Item))
-              )
-              self:AddBagshuiInfoTooltipLine(L.HoldControlAlt, string.format(L.Symbol_Colon, L.MoreInformation))
             end
+
+            -- Stock state.
+            if
+              (item.bagshuiDate or 0) > 0
+              and item.bagshuiStockState ~= nil
+              and item.bagshuiStockState ~= BS_ITEM_STOCK_STATE.NO_CHANGE
+            then
+              if BsInfoTooltip:NumLines() > 0 then
+                self:AddBagshuiInfoTooltipLine(" ")
+              end
+              self:AddBagshuiInfoTooltipLine(
+                L["Stock_" .. item.bagshuiStockState],
+                string.format(L.Symbol_Colon, L.StockState)
+              )
+              self:AddBagshuiInfoTooltipLine(
+                BsUtil.FormatTimeRemainingString(_G.time() - item.bagshuiDate),
+                string.format(L.Symbol_Colon, L.StockLastChange)
+              )
+            end
+
+            -- Assigned category and bag name.
+            if BsInfoTooltip:NumLines() > 0 then
+              self:AddBagshuiInfoTooltipLine(" ")
+            end
+            self:AddBagshuiInfoTooltipLine(
+              (BsCategories:GetName(item.bagshuiCategoryId) or L.Error_ItemCategoryUnknown),
+              string.format(L.Symbol_Colon, L.Category),
+              false
+            )
+            self:AddBagshuiInfoTooltipLine(
+              (self.containers[item.bagNum].name or L.Unknown),
+              string.format(L.Symbol_Colon, L.Bag)
+            )
+
+            -- Instructions.
+            self:AddBagshuiInfoTooltipLine(" ")
+            self:AddBagshuiInfoTooltipLine(
+              L.AltRightClick,
+              string.format(L.Symbol_Colon, string.format(L.Suffix_Menu, L.Item))
+            )
+            self:AddBagshuiInfoTooltipLine(L.HoldControlAlt, string.format(L.Symbol_Colon, L.MoreInformation))
           end
         end
       else
@@ -709,6 +695,9 @@ Bagshui:AddComponent(function()
   --- OnLeave: Reset everything and hide the tooltip.
   function Inventory:ItemButton_OnLeave(itemButton)
     itemButton = itemButton or _G.this
+
+    -- Performance mode: disable per-frame updates when not hovered.
+    itemButton:SetScript("OnUpdate", nil)
 
     -- Clear Edit Mode category highlighting.
     if self.editState.cursorItemType ~= BS_INVENTORY_OBJECT_TYPE.CATEGORY or self.editState.cursorItem == nil then
@@ -883,20 +872,6 @@ Bagshui:AddComponent(function()
         -- Clear stock state when interacting with an item.
         if self.settings.itemStockChangeClearOnInteract then
           item.bagshuiDate = -1
-        end
-
-        -- Flip the expandEmptySlotStacks flag when clicking empty slots if stacking is enabled.
-        if
-          self.settings.stackEmptySlots
-          and not isDrag
-          and mouseButton == "LeftButton"
-          and not _G.CursorHasItem()
-          and item.emptySlot == 1
-        then
-          self.expandEmptySlotStacks = buttonInfo.isEmptySlotStack
-          self:ItemButton_OnLeave()
-          self:ForceUpdateWindow()
-          return
         end
 
         -- Can't do anything else offline.

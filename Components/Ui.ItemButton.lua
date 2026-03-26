@@ -686,19 +686,11 @@ Bagshui:LoadComponent(function()
       inventory
       and item
       and (
-                -- Condition 1: Item must be in the desired container and must NOT be an an empty slot stack.
 (
           inventory.highlightItemsInContainerId
           and item.bagNum == inventory.highlightItemsInContainerId
-          and not button.bagshuiData.isEmptySlotStack
           -- Specific slot highlighting.
           and (not inventory.highlightItemsContainerSlot or item.slotNum == inventory.highlightItemsContainerSlot)
-        )
-        -- Condition 2: Item IS an empty slot stack and represents the desired container.
-        or (
-          button.bagshuiData.isEmptySlotStack
-          and inventory.emptySlotStacks[inventory.containers[item.bagNum].genericType]._bagsRepresented[inventory.highlightItemsInContainerId]
-          and not inventory.highlightItemsContainerSlot
         )
       )
     )

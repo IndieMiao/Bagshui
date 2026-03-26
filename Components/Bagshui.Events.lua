@@ -108,6 +108,10 @@ Bagshui:LoadComponent(
     --- variables in the for loop though.
     local processEventQueue_success, processEventQueue_errorMessage
     function Bagshui:ProcessEventQueue()
+      -- Skip entirely when there are no queued events (avoids pairs() overhead every frame).
+      if next(self.queuedEvents.events) == nil then
+        return
+      end
       -- Loop through queued events and fire them if enough time has passed.
       for event, raiseAfter in pairs(self.queuedEvents.events) do
         if raiseAfter <= _G.GetTime() then

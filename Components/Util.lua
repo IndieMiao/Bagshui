@@ -448,7 +448,6 @@ Bagshui:LoadComponent(function()
     for i = table.getn(tbl), 1, -1 do
       table.remove(tbl, i)
     end
-
     -- Remove any remaining associative table elements.
     -- Credit: https://stackoverflow.com/a/27287723
     for k in next, tbl do
