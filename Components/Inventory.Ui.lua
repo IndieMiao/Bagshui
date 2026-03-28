@@ -83,12 +83,15 @@ Bagshui:AddComponent(function()
           Bagshui:CloseMenus()
         end
 
-        -- When the Hearthstone was picked up by dragging it from the
-        -- Hearthstone button, take it off the cursor.
-        if self.pickedUpHearthstoneFromButton and Bagshui:GetCursorItem() == self.hearthstoneItemRef then
+        -- When a footer shortcut item was picked up by dragging it from a
+        -- shortcut button, take it off the cursor.
+        if
+          self.pickedUpFooterItemFromButton
+          and Bagshui:GetCursorItem() == self[self.pickedUpFooterItemFromButton]
+        then
           _G.ClearCursor()
         end
-        self.pickedUpHearthstoneFromButton = nil
+        self.pickedUpFooterItemFromButton = nil
 
         -- Double-click actions.
         if
@@ -740,59 +743,91 @@ Bagshui:AddComponent(function()
       end
     end
 
-    -- Hearthstone button.
+    local function createFooterItemButton(buttonName, texture, anchorToFrame, itemRefProperty, errorMessage)
+      local button = ui:CreateIconButton({
+        name = buttonName,
+        parentFrame = footer,
+        anchorPoint = "RIGHT",
+        anchorToFrame = anchorToFrame,
+        anchorToPoint = "LEFT",
+        disable = false,
+        onClick = function()
+          local itemRef = self[itemRefProperty]
+          if Bagshui:GetCursorItem() == itemRef then
+            _G.ClearCursor()
+            return
+          end
+          if itemRef then
+            _G.UseContainerItem(itemRef.bagNum, itemRef.slotNum, true)
+          else
+            Bagshui:ShowAndLogErrorMessage(errorMessage)
+          end
+        end,
+        texture = texture,
+        onEnter = function()
+          local itemRef = self[itemRefProperty]
+          if itemRef then
+            _G.this.bagshuiData.bagNum = itemRef.bagNum
+            _G.this.bagshuiData.slotNum = itemRef.slotNum
+            self:ItemButton_OnEnter()
+          end
+        end,
+        onLeave = function()
+          self:ItemButton_OnLeave()
+        end,
+        onUpdate = function()
+          self:ItemButton_OnUpdate(_G.arg1)
+        end,
+      })
+      ui:AddItemSlotButtonGetIdProxy(button)
 
-    buttons.toolbar.hearthstone = ui:CreateIconButton({
-      name = "Hearthstone",
-      parentFrame = footer,
-      anchorPoint = "RIGHT",
-      anchorToFrame = frames.money,
-      anchorToPoint = "LEFT",
-      disable = false,
-      onClick = function()
-        if Bagshui:GetCursorItem() == self.hearthstoneItemRef then
-          _G.ClearCursor()
-          return
+      button:RegisterForDrag("LeftButton")
+      button:SetScript("OnDragStart", function()
+        local itemRef = self[itemRefProperty]
+        if itemRef then
+          Bagshui:PickupItem(itemRef, self, nil, true)
         end
-        if self.hearthstoneItemRef then
-          _G.UseContainerItem(self.hearthstoneItemRef.bagNum, self.hearthstoneItemRef.slotNum, true)
-        else
-          Bagshui:ShowAndLogErrorMessage(L.Error_HearthstoneNotFound)
-        end
-      end,
-      texture = "Hearthstone",
-      onEnter = function()
-        if self.hearthstoneItemRef then
-          _G.this.bagshuiData.bagNum = self.hearthstoneItemRef.bagNum
-          _G.this.bagshuiData.slotNum = self.hearthstoneItemRef.slotNum
-          self:ItemButton_OnEnter()
-        end
-      end,
-      onLeave = function()
-        self:ItemButton_OnLeave()
-      end,
-      onUpdate = function()
-        self:ItemButton_OnUpdate(_G.arg1)
-      end,
-    })
-    -- Make the Hearthstone toolbar button compatible with our `ContainerFrameItemButton_` hackery.
-    ui:AddItemSlotButtonGetIdProxy(buttons.toolbar.hearthstone)
+        self.pickedUpFooterItemFromButton = itemRefProperty
+      end)
 
-    -- Allow picking up the Hearthstone from the button.
-    buttons.toolbar.hearthstone:RegisterForDrag("LeftButton")
-    buttons.toolbar.hearthstone:SetScript("OnDragStart", function()
-      local hearthstone = self.hearthstoneItemRef
-      if hearthstone then
-        Bagshui:PickupItem(hearthstone, self, nil, true)
+      if not self.hearthButton then
+        button:Hide()
       end
-      self.pickedUpHearthstoneFromButton = true
-    end)
 
-    -- Even though we always create the hearthstone button, it may not be enabled
-    -- for this class instance.
-    if not self.hearthButton then
-      buttons.toolbar.hearthstone:Hide()
+      return button
     end
+
+    -- Footer shortcut item buttons.
+
+    buttons.toolbar.hearthstone = createFooterItemButton(
+      "Hearthstone",
+      "Hearthstone",
+      frames.money,
+      "hearthstoneItemRef",
+      L.Error_HearthstoneNotFound
+    )
+
+    buttons.toolbar.timeWornRune = createFooterItemButton(
+      "TimeWornRune",
+      "Time-Worn",
+      buttons.toolbar.hearthstone,
+      "timeWornRuneItemRef",
+      L.Error_TimeWornRuneNotFound
+    )
+    buttons.toolbar.timeWornRune.bagshuiData.lowCountVertexColor = { 1, 0.1, 0.1 }
+    buttons.toolbar.timeWornRune.bagshuiData.missingVertexColor = { 0.5, 0.5, 0.5 }
+    buttons.toolbar.timeWornRune.bagshuiData.assumeSingleChargeWhenUnparsed = true
+
+    buttons.toolbar.verdantRune = createFooterItemButton(
+      "VerdantRune",
+      "worldTree",
+      buttons.toolbar.timeWornRune,
+      "verdantRuneItemRef",
+      L.Error_VerdantRuneNotFound
+    )
+    buttons.toolbar.verdantRune.bagshuiData.lowCountVertexColor = { 1, 0.1, 0.1 }
+    buttons.toolbar.verdantRune.bagshuiData.missingVertexColor = { 0.5, 0.5, 0.5 }
+    buttons.toolbar.verdantRune.bagshuiData.assumeSingleChargeWhenUnparsed = true
 
     -- Clam (open container) button.
     buttons.toolbar.clam = ui:CreateIconButton({
@@ -880,6 +915,8 @@ Bagshui:AddComponent(function()
       frames.money,
       -BsSkin.toolbarGroupSpacing,
       buttons.toolbar.hearthstone,
+      buttons.toolbar.timeWornRune,
+      buttons.toolbar.verdantRune,
       -BsSkin.toolbarGroupSpacing,
       buttons.toolbar.clam,
       buttons.toolbar.pickLock,

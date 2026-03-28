@@ -999,6 +999,8 @@ Bagshui:LoadComponent(function()
     ["Error_DuplicateName"] = "There is already a %s named %s.", -- "There is already a <Object Type> named <Name>."
     ["Error_GroupNotFound"] = "Group ID %s not found.",
     ["Error_HearthstoneNotFound"] = "Hearthstone not found.",
+    ["Error_TimeWornRuneNotFound"] = "Time-Worn Rune not found.",
+    ["Error_VerdantRuneNotFound"] = "Verdant Rune not found.",
     ["Error_ImportInvalidFormat"] = "Import failed: Data was in an unexpected format.`",
     ["Error_ImportVersionTooNew"] = "Import failed: Please upgrade to the latest version of Bagshui.",
     ["Error_ItemCategoryUnknown"] = "!Unknown! (This shouldn't happen).", -- Placed in the tooltip if the item doesn't have a category.

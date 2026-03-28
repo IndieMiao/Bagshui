@@ -1062,6 +1062,8 @@ Bagshui:LoadComponent(function()
     ["Error_DuplicateName"] = "已经存在名为 %s 的 %s。", -- "已经存在一个名为<名称>的<对象类型>。"
     ["Error_GroupNotFound"] = "未找到组ID %s。",
     ["Error_HearthstoneNotFound"] = "未找到炉石。",
+    ["Error_TimeWornRuneNotFound"] = "未找到时光符文。",
+    ["Error_VerdantRuneNotFound"] = "未找到翠绿符文。",
     ["Error_ImportInvalidFormat"] = "导入失败：数据格式意外。",
     ["Error_ImportVersionTooNew"] = "导入失败：请升级到最新版本的Bagshui。",
     ["Error_ItemCategoryUnknown"] = "！未知！（这不应该发生）。", -- 如果物品没有类别，则显示在提示中。

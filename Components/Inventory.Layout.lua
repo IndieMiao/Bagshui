@@ -1983,16 +1983,19 @@ self.dockedInventory and self.dockedInventory.multiplePartialStacks
       self.ui.frames.money:Hide()
     end
 
-    -- Hearthstone button.
-    if self.hearthButton and self.settings.showFooter and self.settings.showHearthstone and self.hearthstoneItemRef then
-      toolbarButtons.hearthstone:Show()
-
-      -- Display cooldown.
-      local cooldownStart, cooldownDuration, isOnCooldown =
-        _G.GetContainerItemCooldown(self.hearthstoneItemRef.bagNum, self.hearthstoneItemRef.slotNum)
-      self.ui:SetIconButtonCooldown(toolbarButtons.hearthstone, cooldownStart, cooldownDuration, isOnCooldown)
+    -- Footer shortcut item buttons.
+    if self.hearthButton and self.settings.showHearthstone then
+      self:SetFooterItemButtonState(toolbarButtons.hearthstone, self.hearthstoneItemRef)
     else
       toolbarButtons.hearthstone:Hide()
+    end
+
+    if self.hearthButton then
+      self:SetFooterItemButtonState(toolbarButtons.timeWornRune, self.timeWornRuneItemRef, true)
+      self:SetFooterItemButtonState(toolbarButtons.verdantRune, self.verdantRuneItemRef, true)
+    else
+      toolbarButtons.timeWornRune:Hide()
+      toolbarButtons.verdantRune:Hide()
     end
 
     -- Clam (open container) button.
@@ -2058,9 +2061,11 @@ self.dockedInventory and self.dockedInventory.multiplePartialStacks
 
     -- Disable unusable stuff in Edit Mode.
     local editModeState = self.editMode and "Disable" or "Enable"
-    -- Hearthstone
+    -- Footer shortcut items.
     if self.hearthButton then
       self.ui.buttons.toolbar.hearthstone[editModeState](self.ui.buttons.toolbar.hearthstone)
+      self.ui.buttons.toolbar.timeWornRune[editModeState](self.ui.buttons.toolbar.timeWornRune)
+      self.ui.buttons.toolbar.verdantRune[editModeState](self.ui.buttons.toolbar.verdantRune)
     end
     -- Search
     self.ui.buttons.toolbar.search[editModeState](self.ui.buttons.toolbar.search)
@@ -2120,6 +2125,58 @@ self.dockedInventory and self.dockedInventory.multiplePartialStacks
       and BsIconButtonTooltip:IsOwned(button)
     then
       self.ui:ShowIconButtonTooltip(button, 0)
+    end
+  end
+
+  --- Control visibility and cooldown state for a footer shortcut item button.
+  ---@param button table Button object.
+  ---@param itemRef table|nil Inventory cache entry for the special item.
+  ---@param showWhenMissing boolean? Whether the button should remain visible when the item is absent.
+  function Inventory:SetFooterItemButtonState(button, itemRef, showWhenMissing)
+    if self.settings.showFooter and (itemRef or showWhenMissing) then
+      button:Show()
+
+      if itemRef then
+        button:Enable()
+
+        local hasOneCharge =
+          itemRef.charges == 1
+          or (
+            button.bagshuiData
+            and button.bagshuiData.assumeSingleChargeWhenUnparsed
+            and (itemRef.charges or 0) == 0
+            and itemRef.count == 1
+            and itemRef.maxStackCount == 1
+          )
+
+        self.ui:SetIconButtonColors(
+          button,
+          ((button.bagshuiData and button.bagshuiData.lowCountVertexColor) and hasOneCharge)
+              and button.bagshuiData.lowCountVertexColor
+            or nil
+        )
+
+        local cooldownStart, cooldownDuration, isOnCooldown =
+          _G.GetContainerItemCooldown(itemRef.bagNum, itemRef.slotNum)
+        self.ui:SetIconButtonCooldown(button, cooldownStart, cooldownDuration, isOnCooldown)
+      else
+        button:Disable()
+        self.ui:SetIconButtonColors(
+          button,
+          (button.bagshuiData and button.bagshuiData.missingVertexColor) or BS_COLOR.GRAY
+        )
+
+        if button.bagshuiData then
+          button.bagshuiData.cooldownStart = nil
+          button.bagshuiData.cooldownDuration = nil
+          button.bagshuiData.isOnCooldown = false
+          if button.bagshuiData.cooldownTexture then
+            button.bagshuiData.cooldownTexture:Hide()
+          end
+        end
+      end
+    else
+      button:Hide()
     end
   end
 
@@ -2187,22 +2244,35 @@ self.dockedInventory and self.dockedInventory.multiplePartialStacks
     end
   end
 
-  --- Look through the inventory cache to find and record references to any special items.
-  --- Currently only used for the Hearthstone.
+  --- Look through the inventory cache to find and record references to footer shortcut items.
   function Inventory:FindSpecialItems()
-    -- Reset Hearthstone item tracking.
+    -- Reset footer shortcut item tracking.
     self.hearthstoneItemRef = nil
+    self.timeWornRuneItemRef = nil
+    self.verdantRuneItemRef = nil
     self.hideItems[BS_INVENTORY_HEARTHSTONE_ITEM_ID] = (
       self.hearthButton
       and self.settings.showHearthstone
       and self.settings.showFooter
     ) or nil
+    self.hideItems[BS_INVENTORY_TIME_WORN_RUNE_ITEM_ID] = (
+      self.hearthButton
+      and self.settings.showFooter
+    ) or nil
+    self.hideItems[BS_INVENTORY_VERDANT_RUNE_ITEM_ID] = (
+      self.hearthButton
+      and self.settings.showFooter
+    ) or nil
 
     for _, bagContents in pairs(self.inventory) do
       for __, item in ipairs(bagContents) do
-        -- Check for Hearthstone.
+        -- Check for footer shortcut items.
         if self.hearthButton and item.id == BS_INVENTORY_HEARTHSTONE_ITEM_ID then
           self.hearthstoneItemRef = item
+        elseif self.hearthButton and item.id == BS_INVENTORY_TIME_WORN_RUNE_ITEM_ID then
+          self.timeWornRuneItemRef = item
+        elseif self.hearthButton and item.id == BS_INVENTORY_VERDANT_RUNE_ITEM_ID then
+          self.verdantRuneItemRef = item
         end
       end
     end

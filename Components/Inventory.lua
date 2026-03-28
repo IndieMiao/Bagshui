@@ -134,8 +134,10 @@ Bagshui:AddComponent(function()
       COLUMN = "Column",
     },
 
-    -- Used to find the Hearthstone for the Hearthstone button.
+    -- Used to find the special teleport items for the footer shortcut buttons.
     BS_INVENTORY_HEARTHSTONE_ITEM_ID = 6948,
+    BS_INVENTORY_TIME_WORN_RUNE_ITEM_ID = 61000,
+    BS_INVENTORY_VERDANT_RUNE_ITEM_ID = 41915,
   })
 
   local Inventory = {}
@@ -417,8 +419,10 @@ Bagshui:AddComponent(function()
       ---@type boolean Make the bag utilization summary visible at all times - managed by UpdateWindow().
       alwaysShowUsageSummary = false,
 
-      ---@type table|nil Hearthstone cache entry tracking.
+      ---@type table|nil Footer shortcut item cache entry tracking.
       hearthstoneItemRef = nil,
+      timeWornRuneItemRef = nil,
+      verdantRuneItemRef = nil,
 
       -- Edit Mode state tracking -- see Components\Inventory.EditMode.lua.
       ---@type boolean
