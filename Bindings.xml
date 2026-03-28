@@ -18,9 +18,6 @@ Bindings are localized in Localization:Init().
   <Binding name="Bagshui_Toggle_Catalog">
     Bagshui.components.Catalog:Toggle()
   </Binding>
-  <Binding name="Bagshui_Resort">
-    Bagshui:ResortAll()
-  </Binding>
   <Binding name="Bagshui_Restack">
     Bagshui:RestackAll()
   </Binding>

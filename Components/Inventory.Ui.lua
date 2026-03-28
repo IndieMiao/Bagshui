@@ -508,7 +508,7 @@ Bagshui:AddComponent(function()
         end
       end
     )
-    frames.searchBox:SetPoint("TOPRIGHT", buttons.toolbar.resort, -BsSkin.toolbarGroupSpacing - 12, 2)
+    frames.searchBox:SetPoint("TOPRIGHT", buttons.toolbar.search, 0, 2)
     frames.searchBox:Hide()
 
     table.insert(self.ui.ordering.topRightToolbar, frames.searchBox)
@@ -945,18 +945,6 @@ Bagshui:AddComponent(function()
           self.ui.frames.searchBox:Show()
           self:UpdateToolbar()
           self.ui.frames.searchBox:SetFocus()
-        end,
-      },
-
-      {
-        name = "Resort",
-        texture = "Resort",
-        tooltipTitle = L.Toolbar_Resort_TooltipTitle,
-        tooltipText = L.Toolbar_Resort_TooltipText,
-        disable = true,
-        onClick = function()
-          _G.PlaySound("igQuestLogOpen")
-          self:Resort()
         end,
       },
 

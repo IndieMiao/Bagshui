@@ -1872,19 +1872,6 @@ self.hoveredItem._bagsRepresented
   function Inventory:UpdateToolbar()
     local toolbarButtons = self.ui.buttons.toolbar
 
-    -- Resort icon.
-    self:SetToolbarButtonState(
-      toolbarButtons.resort,
-      nil,
-      (
-        self.enableResortIcon
-        or (
-                    -- Docked inventory needs resorting.
-self.dockedInventory and self.dockedInventory.enableResortIcon
-        )
-      )
-    )
-
     -- Restack icon.
     self:SetToolbarButtonState(
       toolbarButtons.restack,
